@@ -1,5 +1,6 @@
 """
 Core models for VantagePoint competitive intelligence platform.
+Includes signal capture, compound signals, battlecards, and dead reckoning.
 """
 from django.db import models
 from django.contrib.auth.models import User
@@ -73,6 +74,8 @@ class DataPoint(models.Model):
         ('technology', 'Technology Adoption'),
         ('marketing', 'Marketing Campaign'),
         ('legal', 'Legal/Regulatory'),
+        ('patent', 'Patent Filing'),
+        ('earnings', 'Earnings/Financial'),
         ('news', 'General News'),
     ]
     
@@ -116,6 +119,190 @@ class DataPoint(models.Model):
         return f"{self.company.name}: {self.title[:80]}"
 
 
+class Signal(models.Model):
+    """
+    A structured signal captured from external sources.
+    Types: job_posting, patent_filing, pricing_change, earnings_keyword, leadership_change
+    """
+    
+    SIGNAL_TYPE_CHOICES = [
+        ('job_posting', 'Job Posting'),
+        ('patent_filing', 'Patent Filing'),
+        ('pricing_change', 'Pricing Page Change'),
+        ('earnings_keyword', 'Earnings Call Keyword'),
+        ('leadership_change', 'Leadership Change'),
+        ('funding_event', 'Funding Event'),
+        ('product_signal', 'Product Signal'),
+    ]
+    
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='signals')
+    signal_type = models.CharField(max_length=50, choices=SIGNAL_TYPE_CHOICES)
+    title = models.CharField(max_length=500)
+    description = models.TextField(blank=True)
+    source_url = models.URLField(max_length=1000, blank=True)
+    
+    # For job postings
+    role_type = models.CharField(max_length=100, blank=True, help_text='e.g., Engineering, Sales, Marketing')
+    seniority_level = models.CharField(max_length=50, blank=True, help_text='e.g., VP, Director, Senior, Entry')
+    department = models.CharField(max_length=100, blank=True)
+    
+    # For patent filings
+    patent_category = models.CharField(max_length=200, blank=True)
+    patent_id = models.CharField(max_length=100, blank=True)
+    
+    # For earnings keywords
+    keyword = models.CharField(max_length=100, blank=True)
+    keyword_count = models.IntegerField(default=0)
+    quarter = models.CharField(max_length=10, blank=True, help_text='e.g., Q1 2025')
+    
+    # For pricing changes
+    diff_summary = models.TextField(blank=True)
+    old_snapshot = models.TextField(blank=True)
+    new_snapshot = models.TextField(blank=True)
+    
+    # Scoring
+    strength = models.FloatField(default=0.5, help_text='0-1 signal strength')
+    velocity = models.FloatField(default=0.0, help_text='Rate of change')
+    anomaly_score = models.FloatField(default=0.0, help_text='How far from baseline')
+    
+    metadata = models.JSONField(default=dict, blank=True)
+    captured_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-captured_at']
+        indexes = [
+            models.Index(fields=['company', 'signal_type']),
+            models.Index(fields=['company', 'captured_at']),
+        ]
+    
+    def __str__(self):
+        return f"[{self.signal_type}] {self.company.name}: {self.title[:60]}"
+
+
+class CompoundSignal(models.Model):
+    """
+    Multiple weak signals that co-occur temporally to form a strong compound signal.
+    E.g., VP of Sales hire + pricing page change + new enterprise tier review.
+    """
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='compound_signals')
+    title = models.CharField(max_length=500)
+    hypothesis = models.TextField(help_text='Strategic intent inference in plain language')
+    contributing_signals = models.ManyToManyField(Signal, related_name='compound_signals')
+    contributing_datapoints = models.ManyToManyField(DataPoint, related_name='compound_signals', blank=True)
+    signal_count = models.IntegerField(default=0)
+    confidence = models.FloatField(default=0.5, help_text='Confidence based on independent signal count')
+    severity = models.CharField(max_length=20, choices=[('low','Low'),('medium','Medium'),('high','High'),('critical','Critical')], default='medium')
+    time_window_days = models.IntegerField(default=30, help_text='Window within which signals co-occurred')
+    detected_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['-detected_at']
+    
+    def __str__(self):
+        return f"Compound: {self.title[:60]}"
+
+
+class PricingSnapshot(models.Model):
+    """Weekly snapshot of a competitor's pricing page for diff tracking."""
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='pricing_snapshots')
+    url = models.URLField(max_length=1000)
+    content_text = models.TextField(help_text='Cleaned text of pricing page')
+    content_html = models.TextField(blank=True, help_text='Raw HTML')
+    content_hash = models.CharField(max_length=64, help_text='SHA256 hash for change detection')
+    has_changed = models.BooleanField(default=False)
+    diff_from_previous = models.TextField(blank=True, help_text='Diff from previous snapshot')
+    plan_names = models.JSONField(default=list, blank=True)
+    prices = models.JSONField(default=list, blank=True)
+    captured_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-captured_at']
+    
+    def __str__(self):
+        return f"Pricing: {self.company.name} ({self.captured_at.strftime('%Y-%m-%d')})"
+
+
+class Battlecard(models.Model):
+    """Auto-updating competitive battlecard."""
+    company = models.OneToOneField(Company, on_delete=models.CASCADE, related_name='battlecard')
+    
+    # Positioning
+    strengths = models.JSONField(default=list)
+    weaknesses = models.JSONField(default=list)
+    recent_moves = models.JSONField(default=list, help_text='Last 5 strategic moves')
+    
+    # Competitive positioning
+    pricing_position = models.CharField(max_length=50, blank=True, help_text='premium/mid/budget')
+    target_market = models.CharField(max_length=200, blank=True)
+    key_differentiators = models.JSONField(default=list)
+    
+    # Sales intelligence
+    win_themes = models.JSONField(default=list, help_text='Why customers choose them')
+    loss_themes = models.JSONField(default=list, help_text='Why customers leave them')
+    objection_handlers = models.JSONField(default=list)
+    
+    # Auto-updated fields
+    current_trajectory = models.CharField(max_length=50, blank=True, help_text='growing/stable/declining')
+    threat_assessment = models.TextField(blank=True)
+    signal_summary = models.TextField(blank=True, help_text='Auto-generated from latest signals')
+    
+    last_updated = models.DateTimeField(auto_now=True)
+    auto_update_count = models.IntegerField(default=0)
+    
+    class Meta:
+        ordering = ['-last_updated']
+    
+    def __str__(self):
+        return f"Battlecard: {self.company.name}"
+
+
+class DeadReckoning(models.Model):
+    """
+    Forward projection: given current position + trajectory + resources,
+    project where a competitor will be in N months.
+    """
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='dead_reckonings')
+    
+    # Current state (inputs)
+    current_headcount = models.IntegerField(default=0)
+    current_arr = models.FloatField(default=0, help_text='Estimated ARR in millions')
+    current_market_share = models.FloatField(default=0, help_text='Estimated market share %')
+    current_product_count = models.IntegerField(default=0)
+    current_geo_markets = models.IntegerField(default=1)
+    
+    # Observed velocity (calculated from signals)
+    hiring_velocity = models.FloatField(default=0, help_text='Jobs per month')
+    product_velocity = models.FloatField(default=0, help_text='Launches per quarter')
+    funding_total = models.FloatField(default=0, help_text='Total known funding in millions')
+    expansion_velocity = models.FloatField(default=0, help_text='New markets per year')
+    
+    # Projections (outputs) — 6 and 12 month
+    projected_headcount_6m = models.IntegerField(default=0)
+    projected_headcount_12m = models.IntegerField(default=0)
+    projected_arr_6m = models.FloatField(default=0)
+    projected_arr_12m = models.FloatField(default=0)
+    projected_products_6m = models.IntegerField(default=0)
+    projected_products_12m = models.IntegerField(default=0)
+    projected_markets_6m = models.IntegerField(default=0)
+    projected_markets_12m = models.IntegerField(default=0)
+    
+    # Confidence & narrative
+    confidence = models.FloatField(default=0.5)
+    projection_narrative = models.TextField(blank=True, help_text='Plain language projection')
+    key_assumptions = models.JSONField(default=list)
+    risk_factors = models.JSONField(default=list)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Dead Reckoning: {self.company.name} ({self.created_at.strftime('%Y-%m-%d')})"
+
+
 class Pattern(models.Model):
     """A detected pattern in competitor behavior."""
     
@@ -125,6 +312,9 @@ class Pattern(models.Model):
         ('anomaly', 'Anomaly'),
         ('correlation', 'Correlation'),
         ('strategy_shift', 'Strategy Shift'),
+        ('velocity_alert', 'Velocity Alert'),
+        ('compound', 'Compound Signal'),
+        ('pre_launch', 'Pre-Launch Pattern'),
     ]
     
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='patterns')

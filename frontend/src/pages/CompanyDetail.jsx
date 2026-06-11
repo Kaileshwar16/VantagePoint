@@ -10,9 +10,15 @@ import {
 
 const tooltipStyle = { background: '#fff', border: '1px solid #e2e5ea', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: 12 };
 const COLORS = ['#ff5733', '#1976d2', '#00a67d', '#7b61ff', '#f5a623', '#0097a7', '#e53935', '#c2185b'];
-const catBadge = { product_launch: 'badge-green', pricing_change: 'badge-amber', hiring: 'badge-cyan',
-  partnership: 'badge-purple', funding: 'badge-pink', acquisition: 'badge-red', expansion: 'badge-blue',
-  leadership: 'badge-amber', technology: 'badge-cyan', marketing: 'badge-purple', news: 'badge-blue', legal: 'badge-red' };
+
+const CAT_LABEL = { product_launch: 'Product Launch', pricing_change: 'Pricing Change', hiring: 'Hiring', partnership: 'Partnership', funding: 'Funding', acquisition: 'Acquisition', expansion: 'Expansion', leadership: 'Leadership', technology: 'Technology', marketing: 'Marketing', news: 'News', legal: 'Legal', patent: 'Patent', earnings: 'Earnings' };
+const CAT_BADGE = { product_launch: 'badge-green', pricing_change: 'badge-amber', hiring: 'badge-cyan', partnership: 'badge-purple', funding: 'badge-pink', acquisition: 'badge-red', expansion: 'badge-blue', leadership: 'badge-amber', technology: 'badge-cyan', marketing: 'badge-purple', news: 'badge-blue', legal: 'badge-red' };
+const SENT_LABEL = { positive: 'Positive', neutral: 'Neutral', negative: 'Negative' };
+const IMPACT_LABEL = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
+const PRIORITY_LABEL = { urgent: 'Urgent', high: 'High', medium: 'Medium', low: 'Low' };
+const PTYPE_LABEL = { trend: 'Trend', anomaly: 'Anomaly', correlation: 'Correlation', cycle: 'Cycle' };
+
+function sourceDomain(url) { if (!url) return null; try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return null; } }
 
 const GEO_DATA = {
   'San Francisco, CA': { region: 'North America', lat: 37.7, lng: -122.4 },
@@ -29,6 +35,7 @@ const GEO_DATA = {
 
 function ExpandableRow({ dp }) {
   const [open, setOpen] = useState(false);
+  const domain = sourceDomain(dp.source_url);
   return (
     <>
       <tr onClick={() => setOpen(!open)} style={{ cursor: 'pointer' }}>
@@ -38,10 +45,18 @@ function ExpandableRow({ dp }) {
             {dp.title}
           </div>
         </td>
-        <td><span className={`badge ${catBadge[dp.category] || 'badge-blue'}`}>{dp.category?.replace(/_/g, ' ')}</span></td>
-        <td><span className={`badge ${dp.sentiment === 'positive' ? 'badge-green' : dp.sentiment === 'negative' ? 'badge-red' : 'badge-blue'}`}>{dp.sentiment}</span></td>
-        <td><span className={`badge ${dp.impact === 'critical' ? 'badge-red' : dp.impact === 'high' ? 'badge-amber' : 'badge-blue'}`}>{dp.impact}</span></td>
-        <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{dp.source_name}</td>
+        <td><span className={`badge ${CAT_BADGE[dp.category] || 'badge-blue'}`}>{CAT_LABEL[dp.category] || dp.category}</span></td>
+        <td><span className={`badge ${dp.sentiment === 'positive' ? 'badge-green' : dp.sentiment === 'negative' ? 'badge-red' : 'badge-blue'}`}>{SENT_LABEL[dp.sentiment] || dp.sentiment}</span></td>
+        <td><span className={`badge ${dp.impact === 'critical' ? 'badge-red' : dp.impact === 'high' ? 'badge-amber' : 'badge-blue'}`}>{IMPACT_LABEL[dp.impact] || dp.impact}</span></td>
+        <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          {dp.source_url ? (
+            <a href={dp.source_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 3, textDecoration: 'none' }}>
+              {dp.source_name || domain || 'Source'} <ExternalLink size={10} />
+            </a>
+          ) : (
+            <span>{dp.source_name || '—'}</span>
+          )}
+        </td>
         <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{dp.published_at ? new Date(dp.published_at).toLocaleDateString() : '—'}</td>
       </tr>
       {open && (
@@ -51,8 +66,8 @@ function ExpandableRow({ dp }) {
               {dp.content || 'No additional content available.'}
             </div>
             {dp.source_url && (
-              <a href={dp.source_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
-                View Source <ExternalLink size={11} />
+              <a href={dp.source_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8, color: 'var(--accent)' }}>
+                Open article on {domain || 'source'} <ExternalLink size={11} />
               </a>
             )}
           </td>
@@ -93,7 +108,7 @@ export default function CompanyDetail() {
   if (!company) return <div className="empty-state"><h3>Company not found</h3></div>;
 
   const catBreakdown = (timeline?.category_breakdown || []).map(c => ({
-    name: c.category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), count: c.count
+    name: CAT_LABEL[c.category] || c.category, count: c.count
   }));
 
   // Build radar chart data from categories
@@ -111,23 +126,22 @@ export default function CompanyDetail() {
   const sentPie = Object.entries(sentimentData).map(([name, value]) => ({ name, value }));
   const sentColors = { positive: '#00a67d', neutral: '#1976d2', negative: '#e53935' };
 
-  // Geographic presence
+  // Geographic presence — only use real data, no fake padding
   const hqGeo = GEO_DATA[company.headquarters] || { region: 'Unknown' };
   const expansionMentions = (timeline?.timeline || []).filter(dp => dp.category === 'expansion');
   const geoRegions = {};
-  geoRegions[hqGeo.region || 'North America'] = (geoRegions[hqGeo.region] || 0) + 5;
+  if (hqGeo.region && hqGeo.region !== 'Unknown') {
+    geoRegions[hqGeo.region] = 5; // HQ is a real data point
+  }
   expansionMentions.forEach(dp => {
     const text = (dp.title + ' ' + dp.content).toLowerCase();
     if (text.includes('europe') || text.includes('london') || text.includes('gdpr')) geoRegions['Europe'] = (geoRegions['Europe'] || 0) + 2;
     if (text.includes('asia') || text.includes('tokyo') || text.includes('india') || text.includes('apac')) geoRegions['Asia Pacific'] = (geoRegions['Asia Pacific'] || 0) + 2;
     if (text.includes('latin') || text.includes('brazil')) geoRegions['Latin America'] = (geoRegions['Latin America'] || 0) + 1;
-    geoRegions[hqGeo.region || 'North America'] = (geoRegions[hqGeo.region || 'North America'] || 0) + 1;
+    if (hqGeo.region && hqGeo.region !== 'Unknown') {
+      geoRegions[hqGeo.region] = (geoRegions[hqGeo.region] || 0) + 1;
+    }
   });
-  // Ensure at least some geo data
-  if (Object.keys(geoRegions).length < 2) {
-    geoRegions['Europe'] = 2;
-    geoRegions['Asia Pacific'] = 1;
-  }
   const geoData = Object.entries(geoRegions).map(([name, value]) => ({ name, value }));
 
   // Impact over time (treemap-like)
@@ -275,7 +289,7 @@ export default function CompanyDetail() {
                         <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</div>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{p.description.slice(0, 100)}...</div>
                       </td>
-                      <td><span className={`badge ${p.pattern_type === 'trend' ? 'badge-blue' : 'badge-amber'}`}>{p.pattern_type?.replace(/_/g,' ')}</span></td>
+                      <td><span className={`badge ${p.pattern_type === 'trend' ? 'badge-blue' : 'badge-amber'}`}>{PTYPE_LABEL[p.pattern_type] || p.pattern_type}</span></td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <div style={{ width: 50, height: 5, background: 'var(--bg-muted)', borderRadius: 3, overflow: 'hidden' }}>
@@ -298,6 +312,7 @@ export default function CompanyDetail() {
           <div className="grid-2">
             <div className="card">
               <div className="card-header"><span className="card-title">Geographic Presence</span></div>
+              {geoData.length > 0 ? (
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={geoData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#eef0f4" />
@@ -309,6 +324,7 @@ export default function CompanyDetail() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              ) : <div className="empty-state"><p>No geographic data available. Add company headquarters or scrape expansion signals.</p></div>}
               <div style={{ padding: '12px 0 0', fontSize: 12, color: 'var(--text-muted)', borderTop: '1px solid var(--border-light)', marginTop: 12 }}>
                 <MapPin size={12} style={{ display: 'inline', marginRight: 4 }} />
                 Headquarters: <strong style={{ color: 'var(--text-primary)' }}>{company.headquarters || 'Unknown'}</strong>
@@ -397,7 +413,7 @@ export default function CompanyDetail() {
                 <div className="insight-desc">{ins.description}</div>
                 {ins.recommendation && <div style={{ padding: '8px 12px', background: 'var(--green-bg)', borderRadius: 5, marginBottom: 8, fontSize: 12, color: 'var(--green)', borderLeft: '3px solid var(--green)' }}>💡 <strong>Recommendation:</strong> {ins.recommendation}</div>}
                 <div className="insight-meta">
-                  <span className={`badge ${ins.priority === 'urgent' ? 'badge-red' : ins.priority === 'high' ? 'badge-amber' : 'badge-blue'}`}>{ins.priority}</span>
+                  <span className={`badge ${ins.priority === 'urgent' ? 'badge-red' : ins.priority === 'high' ? 'badge-amber' : 'badge-blue'}`}>{PRIORITY_LABEL[ins.priority] || ins.priority}</span>
                   {ins.predicted_timeline && <span className="badge badge-cyan">⏱ {ins.predicted_timeline}</span>}
                   <span className="badge badge-purple">{Math.round(ins.probability * 100)}% confidence</span>
                 </div>

@@ -2,12 +2,33 @@ import { useState, useEffect } from 'react';
 import { getDataPoints } from '../services/api';
 import { Search, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 
-const catBadge = { product_launch: 'badge-green', pricing_change: 'badge-amber', hiring: 'badge-cyan',
-  partnership: 'badge-purple', funding: 'badge-pink', acquisition: 'badge-red', expansion: 'badge-blue',
-  leadership: 'badge-amber', technology: 'badge-cyan', marketing: 'badge-purple', news: 'badge-blue', legal: 'badge-red' };
+const CAT_LABEL = {
+  product_launch: 'Product Launch', pricing_change: 'Pricing Change', hiring: 'Hiring',
+  partnership: 'Partnership', funding: 'Funding', acquisition: 'Acquisition',
+  expansion: 'Expansion', leadership: 'Leadership', technology: 'Technology',
+  marketing: 'Marketing', news: 'News', legal: 'Legal', patent: 'Patent', earnings: 'Earnings',
+};
+const CAT_BADGE = {
+  product_launch: 'badge-green', pricing_change: 'badge-amber', hiring: 'badge-cyan',
+  partnership: 'badge-purple', funding: 'badge-pink', acquisition: 'badge-red',
+  expansion: 'badge-blue', leadership: 'badge-amber', technology: 'badge-cyan',
+  marketing: 'badge-purple', news: 'badge-blue', legal: 'badge-red', patent: 'badge-purple', earnings: 'badge-green',
+};
+const SENT_LABEL = { positive: 'Positive', neutral: 'Neutral', negative: 'Negative' };
+const SENT_BADGE = { positive: 'badge-green', neutral: 'badge-blue', negative: 'badge-red' };
+const IMPACT_LABEL = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
+const IMPACT_BADGE = { critical: 'badge-red', high: 'badge-amber', medium: 'badge-blue', low: 'badge-green' };
+
+/** Extract display hostname from a URL */
+function sourceDomain(url) {
+  if (!url) return null;
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url.slice(0, 40); }
+}
 
 function ExpandableRow({ dp }) {
   const [open, setOpen] = useState(false);
+  const domain = sourceDomain(dp.source_url);
+
   return (
     <>
       <tr onClick={() => setOpen(!open)} style={{ cursor: 'pointer' }}>
@@ -18,11 +39,19 @@ function ExpandableRow({ dp }) {
           </div>
         </td>
         <td style={{ fontWeight: 600, color: 'var(--accent)', fontSize: 13 }}>{dp.company_name}</td>
-        <td><span className={`badge ${catBadge[dp.category] || 'badge-blue'}`}>{dp.category?.replace(/_/g, ' ')}</span></td>
-        <td><span className={`badge ${dp.sentiment === 'positive' ? 'badge-green' : dp.sentiment === 'negative' ? 'badge-red' : 'badge-blue'}`}>{dp.sentiment}</span></td>
-        <td><span className={`badge ${dp.impact === 'critical' ? 'badge-red' : dp.impact === 'high' ? 'badge-amber' : dp.impact === 'medium' ? 'badge-blue' : 'badge-green'}`}>{dp.impact}</span></td>
-        <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{dp.source_name || '—'}</td>
-        <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{dp.published_at ? new Date(dp.published_at).toLocaleDateString() : '—'}</td>
+        <td><span className={`badge ${CAT_BADGE[dp.category] || 'badge-blue'}`}>{CAT_LABEL[dp.category] || dp.category}</span></td>
+        <td><span className={`badge ${SENT_BADGE[dp.sentiment] || 'badge-blue'}`}>{SENT_LABEL[dp.sentiment] || dp.sentiment}</span></td>
+        <td><span className={`badge ${IMPACT_BADGE[dp.impact] || 'badge-blue'}`}>{IMPACT_LABEL[dp.impact] || dp.impact}</span></td>
+        <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          {dp.source_url ? (
+            <a href={dp.source_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 3, textDecoration: 'none' }}>
+              {dp.source_name || domain || 'Source'} <ExternalLink size={10} />
+            </a>
+          ) : (
+            <span>{dp.source_name || '—'}</span>
+          )}
+        </td>
+        <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{dp.published_at ? new Date(dp.published_at).toLocaleDateString() : new Date(dp.created_at).toLocaleDateString()}</td>
       </tr>
       {open && (
         <tr>
@@ -31,8 +60,8 @@ function ExpandableRow({ dp }) {
               {dp.content || 'No additional content available for this data point.'}
             </div>
             {dp.source_url && (
-              <a href={dp.source_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 10 }}>
-                View Original Source <ExternalLink size={11} />
+              <a href={dp.source_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 10, color: 'var(--accent)' }}>
+                Open original article on {domain} <ExternalLink size={11} />
               </a>
             )}
           </td>
@@ -82,7 +111,7 @@ export default function Intel() {
           <input className="input" placeholder="Search by title or company..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 34 }} />
         </div>
         <select className="select" value={catFilter} onChange={e => setCatFilter(e.target.value)} style={{ width: 180 }}>
-          {categories.map(c => <option key={c} value={c}>{c === 'all' ? 'All Categories' : c.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>)}
+          {categories.map(c => <option key={c} value={c}>{c === 'all' ? 'All Categories' : CAT_LABEL[c] || c}</option>)}
         </select>
         <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>
           Showing {filtered.length} of {data.length}

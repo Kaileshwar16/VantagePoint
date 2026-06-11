@@ -69,26 +69,20 @@ def run_scrape_for_company(company_id, spider_name='news'):
 
 
 def _parse_date(date_str):
-    """Try to parse various date formats."""
+    """Parse date strings robustly using dateutil.
+    
+    Returns None if the date can't be parsed — never fabricates a date.
+    Using timezone.now() as fallback would corrupt temporal analysis by
+    making old articles appear new.
+    """
     if not date_str:
-        return timezone.now()
+        return None
     
-    formats = [
-        '%Y-%m-%dT%H:%M:%S',
-        '%Y-%m-%dT%H:%M:%SZ',
-        '%Y-%m-%dT%H:%M:%S%z',
-        '%a, %d %b %Y %H:%M:%S %Z',
-        '%a, %d %b %Y %H:%M:%S %z',
-        '%Y-%m-%d',
-    ]
-    
-    for fmt in formats:
-        try:
-            dt = datetime.strptime(date_str.strip(), fmt)
-            if dt.tzinfo is None:
-                return timezone.make_aware(dt)
-            return dt
-        except (ValueError, AttributeError):
-            continue
-    
-    return timezone.now()
+    from dateutil import parser
+    try:
+        dt = parser.parse(date_str.strip())
+        if dt.tzinfo is None:
+            return timezone.make_aware(dt)
+        return dt
+    except Exception:
+        return None

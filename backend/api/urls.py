@@ -3,7 +3,10 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     CompanyViewSet, DataPointViewSet, PatternViewSet,
-    InsightViewSet, ScrapeJobViewSet, dashboard_stats,
+    InsightViewSet, ScrapeJobViewSet, SignalViewSet,
+    CompoundSignalViewSet, PricingSnapshotViewSet,
+    BattlecardViewSet, DeadReckoningViewSet,
+    dashboard_stats, timeline_overlay,
 )
 
 router = DefaultRouter()
@@ -12,8 +15,14 @@ router.register(r'datapoints', DataPointViewSet)
 router.register(r'patterns', PatternViewSet)
 router.register(r'insights', InsightViewSet)
 router.register(r'scrape-jobs', ScrapeJobViewSet)
+router.register(r'signals', SignalViewSet)
+router.register(r'compound-signals', CompoundSignalViewSet)
+router.register(r'pricing-snapshots', PricingSnapshotViewSet)
+router.register(r'battlecards', BattlecardViewSet)
+router.register(r'dead-reckonings', DeadReckoningViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
     path('dashboard/', dashboard_stats, name='dashboard-stats'),
+    path('timeline-overlay/', timeline_overlay, name='timeline-overlay'),
 ]

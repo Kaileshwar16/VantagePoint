@@ -6,6 +6,10 @@ import CompanyDetail from './pages/CompanyDetail';
 import Insights from './pages/Insights';
 import Patterns from './pages/Patterns';
 import Intel from './pages/Intel';
+import Signals from './pages/Signals';
+import Battlecards from './pages/Battlecards';
+import DeadReckoning from './pages/DeadReckoning';
+import TemporalAnalysis from './pages/TemporalAnalysis';
 import { ChevronRight } from 'lucide-react';
 import './index.css';
 
@@ -15,13 +19,15 @@ const pageTitles = {
   '/insights': 'Insights',
   '/patterns': 'Patterns',
   '/intel': 'Data Points',
+  '/signals': 'Signal Capture',
+  '/battlecards': 'Battlecards',
+  '/dead-reckoning': 'Dead Reckoning',
+  '/temporal': 'Temporal Analysis',
 };
 
 function TopBar() {
   const location = useLocation();
   const path = location.pathname;
-
-  // Handle company detail pages
   const isCompanyDetail = path.startsWith('/companies/');
   const crumbs = isCompanyDetail
     ? [{ label: 'Companies', path: '/companies' }, { label: 'Detail' }]
@@ -43,13 +49,7 @@ function TopBar() {
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{
-          width: 30, height: 30, borderRadius: '50%', background: 'var(--accent)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'white', fontSize: 12, fontWeight: 700,
-        }}>
-          VP
-        </div>
+        <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 12, fontWeight: 700 }}>VP</div>
       </div>
     </div>
   );
@@ -69,6 +69,10 @@ function AppContent() {
             <Route path="/insights" element={<Insights />} />
             <Route path="/patterns" element={<Patterns />} />
             <Route path="/intel" element={<Intel />} />
+            <Route path="/signals" element={<Signals />} />
+            <Route path="/battlecards" element={<Battlecards />} />
+            <Route path="/dead-reckoning" element={<DeadReckoning />} />
+            <Route path="/temporal" element={<TemporalAnalysis />} />
           </Routes>
         </div>
       </main>

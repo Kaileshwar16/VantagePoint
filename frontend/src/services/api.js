@@ -16,9 +16,29 @@ export const updateInsight = (id, data) => API.patch(`/insights/${id}/`, data);
 export const getDashboard = () => API.get('/dashboard/');
 
 export const triggerScrape = (companyId, spider = 'news') =>
-  API.post(`/scraping/trigger/${companyId}/`, { spider });
+  API.post(`/companies/${companyId}/scrape/`, { spider });
 export const runAnalysis = (companyId) =>
   API.post(`/analysis/run/${companyId}/`);
 export const runAllAnalysis = () => API.post('/analysis/run-all/');
+
+// Signal capture & advanced analysis
+export const captureSignals = (companyId) =>
+  API.post(`/companies/${companyId}/capture-signals/`);
+export const runAdvancedAnalysis = (companyId) =>
+  API.post(`/companies/${companyId}/advanced-analysis/`);
+
+// Signals
+export const getSignals = (params) => API.get('/signals/', { params });
+export const getCompoundSignals = (params) => API.get('/compound-signals/', { params });
+export const getPricingSnapshots = (params) => API.get('/pricing-snapshots/', { params });
+
+// Battlecards & Dead Reckoning
+export const getBattlecards = (params) => API.get('/battlecards/', { params });
+export const getDeadReckonings = (params) => API.get('/dead-reckonings/', { params });
+export const createDeadReckoning = (data) => API.post('/dead-reckonings/', data);
+
+// Timeline Overlay
+export const getTimelineOverlay = (companyIds, days = 180) =>
+  API.post('/timeline-overlay/', { company_ids: companyIds, days });
 
 export default API;

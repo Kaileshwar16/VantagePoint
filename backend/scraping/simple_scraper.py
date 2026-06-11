@@ -42,16 +42,53 @@ def scrape_company_news(company_name, company_domain=''):
     return results
 
 
+def _is_relevant(title, content, company_name):
+    """Check if a scraped article is actually about the target company."""
+    combined = title + ' ' + content
+    combined_lower = combined.lower()
+    name_lower = company_name.lower().strip()
+    
+    # Must mention the company name
+    if name_lower not in combined_lower[:300]:
+        return False
+    
+    # Reject if the title is just a generic page section
+    stripped_title = title.strip()
+    if len(stripped_title) < 10 or stripped_title.lower() in ['news', 'blog', 'home', 'about']:
+        return False
+        
+    # Strictly filter single-word dictionary companies like Slack, Notion, Stripe
+    if len(company_name.split()) == 1 and company_name in ['Slack', 'Notion', 'Stripe']:
+        # Require case-sensitive match (e.g. "Slack" not "slack")
+        import re
+        if not re.search(r'\b' + re.escape(company_name) + r'\b', combined):
+            return False
+            
+        # Reject common false positive phrases even if capitalized at start of sentence
+        FALSE_POSITIVE_PATTERNS = [
+            r'cut .* slack', r'some slack', r'pick up the slack', r'slack off', r'slack jaw',
+            r'notion of', r'notion that', r'the notion', r'preconceived notion', r'no notion',
+            r'racing stripe', r'pin stripe', r'tiger stripe',
+            r'nike', r'dunk', r'shoe', r'sneaker', r'air max'
+        ]
+        for pat in FALSE_POSITIVE_PATTERNS:
+            if re.search(pat, combined_lower):
+                return False
+                
+    return True
+
+
 def _scrape_bing_news(company_name):
     """Scrape Bing News RSS feed."""
     items = []
-    encoded = quote_plus(company_name)
+    # Use quoted company name to get exact matches
+    encoded = quote_plus(f'"{company_name}" company')
     url = f'https://www.bing.com/news/search?q={encoded}&format=RSS'
     
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
         if resp.status_code == 200:
-            soup = BeautifulSoup(resp.content, 'html.parser')
+            soup = BeautifulSoup(resp.content, 'xml')
             for item in soup.find_all('item'):
                 title = item.find('title')
                 desc = item.find('description')
@@ -60,14 +97,22 @@ def _scrape_bing_news(company_name):
                 source = item.find('source')
                 
                 if title:
+                    title_text = title.get_text(strip=True)
+                    raw_desc = desc.get_text(strip=True) if desc else ''
+                    desc_text = BeautifulSoup(raw_desc, 'html.parser').get_text(separator=' ', strip=True) if raw_desc else ''
+                    
+                    # Skip irrelevant results
+                    if not _is_relevant(title_text, desc_text, company_name):
+                        continue
+                    
                     items.append({
-                        'title': title.get_text(strip=True),
-                        'content': desc.get_text(strip=True) if desc else '',
+                        'title': title_text,
+                        'content': desc_text,
                         'source_url': link.get_text(strip=True) if link else '',
                         'source_name': source.get_text(strip=True) if source else 'Bing News',
                         'published_at': pub_date.get_text(strip=True) if pub_date else '',
-                        'category': _classify_text(title.get_text()),
-                        'sentiment': _simple_sentiment(title.get_text() + ' ' + (desc.get_text() if desc else '')),
+                        'category': _classify_text(title_text),
+                        'sentiment': _simple_sentiment(title_text + ' ' + desc_text),
                         'impact': 'medium',
                         'confidence': 0.7,
                     })
@@ -80,13 +125,14 @@ def _scrape_bing_news(company_name):
 def _scrape_google_news_rss(company_name):
     """Scrape Google News RSS feed."""
     items = []
-    encoded = quote_plus(company_name)
+    # Use quoted company name to get exact matches
+    encoded = quote_plus(f'"{company_name}"')
     url = f'https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en'
     
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
         if resp.status_code == 200:
-            soup = BeautifulSoup(resp.content, 'html.parser')
+            soup = BeautifulSoup(resp.content, 'xml')
             for item in soup.find_all('item')[:15]:
                 title = item.find('title')
                 desc = item.find('description')
@@ -95,14 +141,22 @@ def _scrape_google_news_rss(company_name):
                 source = item.find('source')
                 
                 if title:
+                    title_text = title.get_text(strip=True)
+                    raw_desc = desc.get_text(strip=True) if desc else ''
+                    desc_text = BeautifulSoup(raw_desc, 'html.parser').get_text(separator=' ', strip=True) if raw_desc else ''
+                    
+                    # Skip irrelevant results
+                    if not _is_relevant(title_text, desc_text, company_name):
+                        continue
+                    
                     items.append({
-                        'title': title.get_text(strip=True),
-                        'content': desc.get_text(strip=True) if desc else '',
+                        'title': title_text,
+                        'content': desc_text,
                         'source_url': link.get_text(strip=True) if link else '',
                         'source_name': source.get_text(strip=True) if source else 'Google News',
                         'published_at': pub_date.get_text(strip=True) if pub_date else '',
-                        'category': _classify_text(title.get_text()),
-                        'sentiment': _simple_sentiment(title.get_text() + ' ' + (desc.get_text() if desc else '')),
+                        'category': _classify_text(title_text),
+                        'sentiment': _simple_sentiment(title_text + ' ' + desc_text),
                         'impact': 'medium',
                         'confidence': 0.7,
                     })
@@ -199,17 +253,20 @@ def _scrape_company_blog(domain):
                     
                     content = article.get_text(separator=' ', strip=True)[:500]
                     
-                    if title:
-                        results.append({
-                            'title': title,
-                            'content': content,
-                            'source_url': link,
-                            'source_name': f'Company Blog',
-                            'category': _classify_text(title),
-                            'sentiment': _simple_sentiment(title + ' ' + content),
-                            'impact': 'medium',
-                            'confidence': 0.75,
-                        })
+                    # Skip generic page titles or very short titles
+                    if not title or len(title.strip()) < 15:
+                        continue
+                    
+                    results.append({
+                        'title': title,
+                        'content': content,
+                        'source_url': link or url,
+                        'source_name': 'Company Blog',
+                        'category': _classify_text(title),
+                        'sentiment': _simple_sentiment(title + ' ' + content),
+                        'impact': 'medium',
+                        'confidence': 0.75,
+                    })
                 break  # Found a working blog path
         except Exception:
             continue
