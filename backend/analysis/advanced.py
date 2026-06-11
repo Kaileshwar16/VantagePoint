@@ -425,39 +425,41 @@ def _parse_funding_amount(text):
     """Extract actual dollar amounts from article text.
     
     Handles: $5M, $50 million, $1.2B, $500,000, etc.
+    Actively ignores amounts that are valuations (e.g. '$10B Valuation').
     Returns amount in millions, or 0 if unparseable.
     """
     import re
     text_lower = text.lower()
     
-    # Pattern: $X.X billion
-    match = re.search(r'\$\s*([\d,.]+)\s*(?:b|billion)', text_lower)
-    if match:
+    amounts = []
+    # Find all dollar amounts with optional B/M suffix
+    for match in re.finditer(r'\$\s*([\d,]+(?:\.\d+)?)\s*(b|m|billion|million|mn)?\b', text_lower):
+        val_str = match.group(1).replace(',', '')
+        suffix = match.group(2)
         try:
-            return float(match.group(1).replace(',', '')) * 1000  # convert to millions
+            val = float(val_str)
         except ValueError:
-            pass
-    
-    # Pattern: $X.X million / $XM
-    match = re.search(r'\$\s*([\d,.]+)\s*(?:m(?:illion)?|mn)', text_lower)
-    if match:
-        try:
-            return float(match.group(1).replace(',', ''))
-        except ValueError:
-            pass
-    
-    # Pattern: bare $X,XXX,XXX (likely thousands or millions)
-    match = re.search(r'\$\s*([\d,]+(?:\.\d+)?)', text_lower)
-    if match:
-        try:
-            amount = float(match.group(1).replace(',', ''))
-            if amount >= 1_000_000:
-                return amount / 1_000_000  # convert raw dollars to millions
-            elif amount >= 100:
-                return amount  # already in millions notation (e.g., "$50" in context)
-        except ValueError:
-            pass
-    
+            continue
+            
+        # Check context after match to see if it's a valuation
+        start, end = match.span()
+        context_after = text_lower[end:end+20]
+        if 'valuation' in context_after or 'valued' in context_after or 'appraised' in context_after:
+            continue  # Skip valuations
+            
+        if suffix in ['b', 'billion']:
+            amounts.append(val * 1000)
+        elif suffix in ['m', 'million', 'mn']:
+            amounts.append(val)
+        else:
+            # no suffix, check if raw dollars are large enough
+            if val >= 1_000_000:
+                amounts.append(val / 1_000_000)
+            elif val >= 1:
+                amounts.append(val)  # Assume it was already in millions if it's like $50
+                
+    if amounts:
+        return amounts[0]  # Return first valid funding amount found
     return 0.0
 
 
