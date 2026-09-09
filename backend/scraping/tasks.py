@@ -8,8 +8,6 @@ from datetime import datetime
 from io import StringIO
 
 from django.utils import timezone
-from scrapy.crawler import CrawlerRunner
-from scrapy.utils.log import configure_logging
 
 from api.models import Company, DataPoint, ScrapeJob
 
@@ -26,20 +24,20 @@ def run_scrape_for_company(company_id, spider_name='news'):
     except Company.DoesNotExist:
         logger.error(f"Company {company_id} not found")
         return
-    
+
     logger.info(f"Starting scrape for {company.name} using {spider_name} spider")
-    
+
     # For now, use requests + BeautifulSoup as a simpler alternative
     # that doesn't require Twisted event loop
     from scraping.simple_scraper import scrape_company_news, scrape_company_website
-    
+
     if spider_name == 'news':
         results = scrape_company_news(company.name, company.domain)
     elif spider_name == 'website':
         results = scrape_company_website(company.domain)
     else:
-        results = scrape_company_news(company.name, company.domain)
-    
+        raise ValueError('Supported spiders: news, website')
+
     # Save results to database
     items_count = 0
     for item in results:
@@ -63,21 +61,21 @@ def run_scrape_for_company(company_id, spider_name='news'):
                 raw_data=item,
             )
             items_count += 1
-    
+
     logger.info(f"Scraped {items_count} new items for {company.name}")
     return items_count
 
 
 def _parse_date(date_str):
     """Parse date strings robustly using dateutil.
-    
+
     Returns None if the date can't be parsed — never fabricates a date.
     Using timezone.now() as fallback would corrupt temporal analysis by
     making old articles appear new.
     """
     if not date_str:
         return None
-    
+
     from dateutil import parser
     try:
         dt = parser.parse(date_str.strip())

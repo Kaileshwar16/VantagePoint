@@ -9,7 +9,7 @@ from datetime import timedelta
 from difflib import unified_diff
 from urllib.parse import quote_plus
 
-import requests
+from . import http as requests
 from bs4 import BeautifulSoup
 from django.utils import timezone
 
@@ -54,16 +54,16 @@ def track_job_postings(company):
     """Scrape job postings for a company from Google Jobs via news search."""
     signals = []
     name = company.name
-    
+
     # Search for job postings via Bing News
     queries = [
         f'{name} hiring jobs',
         f'{name} careers job openings',
         f'{name} job posting',
     ]
-    
+
     all_job_titles = []
-    
+
     for query in queries[:2]:
         try:
             encoded = quote_plus(query)
@@ -79,11 +79,11 @@ def track_job_postings(company):
                         title_text = title.get_text(strip=True)
                         desc_text = desc.get_text(strip=True) if desc else ''
                         combined = (title_text + ' ' + desc_text).lower()
-                        
+
                         # Classify role type
                         role_type = _classify_role(combined)
                         seniority = _classify_seniority(combined)
-                        
+
                         all_job_titles.append({
                             'title': title_text,
                             'role_type': role_type,
@@ -92,13 +92,13 @@ def track_job_postings(company):
                         })
         except Exception as e:
             logger.warning(f"Job tracking search failed for {name}: {e}")
-    
+
     # Also try to scrape the company's careers page directly
     if company.domain:
         domain = company.domain.rstrip('/')
         if not domain.startswith('http'):
             domain = f'https://{domain}'
-        
+
         for path in ['/careers', '/jobs', '/careers/open-positions', '/about/careers']:
             try:
                 resp = requests.get(f'{domain}{path}', headers=HEADERS, timeout=10)
@@ -118,7 +118,7 @@ def track_job_postings(company):
                     break
             except Exception:
                 continue
-    
+
     # Deduplicate and create signals
     seen = set()
     for job in all_job_titles:
@@ -126,14 +126,14 @@ def track_job_postings(company):
         if key in seen or len(key) < 5:
             continue
         seen.add(key)
-        
+
         # Check for duplicates in DB
         exists = Signal.objects.filter(
             company=company,
             signal_type='job_posting',
             title__iexact=job['title'][:500],
         ).exists()
-        
+
         if not exists:
             signal = Signal.objects.create(
                 company=company,
@@ -145,21 +145,21 @@ def track_job_postings(company):
                 strength=0.6 if job['seniority'] in ['c_level', 'vp', 'director'] else 0.4,
             )
             signals.append(signal)
-    
+
     # Calculate velocity - compare with previous period
     now = timezone.now()
     recent = Signal.objects.filter(company=company, signal_type='job_posting', captured_at__gte=now - timedelta(days=30)).count()
     previous = Signal.objects.filter(company=company, signal_type='job_posting', captured_at__gte=now - timedelta(days=60), captured_at__lt=now - timedelta(days=30)).count()
-    
+
     velocity = 0
     if previous > 0:
         velocity = (recent - previous) / previous
     elif recent > 0:
         velocity = 1.0
-    
+
     # Update velocity on recent signals
     Signal.objects.filter(company=company, signal_type='job_posting', captured_at__gte=now - timedelta(days=7)).update(velocity=velocity)
-    
+
     return signals
 
 
@@ -171,14 +171,14 @@ def track_patent_filings(company):
     """Search for recent patent filings via Google Patents / news."""
     signals = []
     name = company.name
-    
+
     # Search for patent news
     queries = [
         f'{name} patent filing',
         f'{name} patent application',
         f'{name} invention patent',
     ]
-    
+
     for query in queries[:2]:
         try:
             encoded = quote_plus(query)
@@ -194,18 +194,18 @@ def track_patent_filings(company):
                         title_text = title.get_text(strip=True)
                         desc_text = desc.get_text(strip=True) if desc else ''
                         combined = (title_text + ' ' + desc_text).lower()
-                        
+
                         # Only include if actually patent-related
                         if any(kw in combined for kw in ['patent', 'filing', 'invention', 'intellectual property', 'ip ']):
                             # Classify patent category
                             cat = _classify_patent_category(combined)
-                            
+
                             exists = Signal.objects.filter(
                                 company=company,
                                 signal_type='patent_filing',
                                 title__iexact=title_text[:500],
                             ).exists()
-                            
+
                             if not exists:
                                 signal = Signal.objects.create(
                                     company=company,
@@ -219,7 +219,7 @@ def track_patent_filings(company):
                                 signals.append(signal)
         except Exception as e:
             logger.warning(f"Patent search failed for {name}: {e}")
-    
+
     return signals
 
 
@@ -240,14 +240,14 @@ def track_earnings_keywords(company):
     """Search for earnings call transcripts and track keyword frequency."""
     signals = []
     name = company.name
-    
+
     # Search for earnings transcripts
     queries = [
         f'{name} earnings call transcript',
         f'{name} quarterly results earnings',
         f'{name} investor call Q',
     ]
-    
+
     for query in queries[:2]:
         try:
             encoded = quote_plus(query)
@@ -263,7 +263,7 @@ def track_earnings_keywords(company):
                         title_text = title.get_text(strip=True)
                         desc_text = desc.get_text(strip=True) if desc else ''
                         combined = (title_text + ' ' + desc_text).lower()
-                        
+
                         if any(kw in combined for kw in ['earnings', 'quarterly', 'fiscal', 'revenue', 'results']):
                             # Count keyword mentions
                             keyword_counts = {}
@@ -271,14 +271,14 @@ def track_earnings_keywords(company):
                                 count = combined.count(kw)
                                 if count > 0:
                                     keyword_counts[kw] = count
-                            
+
                             # Determine quarter
                             quarter = _detect_quarter(combined)
-                            
+
                             if keyword_counts:
                                 # Create a signal for each notable keyword
                                 top_keywords = sorted(keyword_counts.items(), key=lambda x: x[1], reverse=True)[:5]
-                                
+
                                 for kw, count in top_keywords:
                                     exists = Signal.objects.filter(
                                         company=company,
@@ -286,7 +286,7 @@ def track_earnings_keywords(company):
                                         keyword=kw,
                                         quarter=quarter,
                                     ).exists()
-                                    
+
                                     if not exists:
                                         signal = Signal.objects.create(
                                             company=company,
@@ -302,7 +302,7 @@ def track_earnings_keywords(company):
                                         signals.append(signal)
         except Exception as e:
             logger.warning(f"Earnings search failed for {name}: {e}")
-    
+
     return signals
 
 
@@ -314,13 +314,13 @@ def track_pricing_page(company):
     """Take a snapshot of a company's pricing page and detect changes."""
     if not company.domain:
         return None
-    
+
     domain = company.domain.rstrip('/')
     if not domain.startswith('http'):
         domain = f'https://{domain}'
-    
+
     pricing_url = f'{domain}/pricing'
-    
+
     try:
         resp = requests.get(pricing_url, headers=HEADERS, timeout=15, allow_redirects=True)
         if resp.status_code != 200:
@@ -330,33 +330,33 @@ def track_pricing_page(company):
                 if resp.status_code == 200:
                     pricing_url = f'{domain}{alt}'
                     break
-        
+
         if resp.status_code != 200:
             return None
-        
+
         soup = BeautifulSoup(resp.content, 'html.parser')
-        
+
         # Remove scripts, styles, nav, footer
         for tag in soup.find_all(['script', 'style', 'nav', 'footer', 'header', 'noscript']):
             tag.decompose()
-        
+
         body = soup.find('body')
         text_content = body.get_text(separator='\n', strip=True) if body else ''
         # Clean up excessive whitespace
         text_content = re.sub(r'\n{3,}', '\n\n', text_content)
-        
+
         # Extract pricing signals
         plan_names = _extract_plan_names(text_content)
         prices = _extract_prices(text_content)
-        
+
         content_hash = hashlib.sha256(text_content.encode()).hexdigest()
-        
+
         # Get previous snapshot
         prev_snapshot = PricingSnapshot.objects.filter(company=company).first()
-        
+
         has_changed = False
         diff_text = ''
-        
+
         if prev_snapshot:
             if prev_snapshot.content_hash != content_hash:
                 has_changed = True
@@ -365,7 +365,7 @@ def track_pricing_page(company):
                 new_lines = text_content.splitlines()
                 diff_lines = list(unified_diff(old_lines, new_lines, lineterm='', n=2))
                 diff_text = '\n'.join(diff_lines[:200])  # Limit diff size
-                
+
                 # Create a signal for the pricing change
                 Signal.objects.create(
                     company=company,
@@ -384,7 +384,7 @@ def track_pricing_page(company):
                         'new_prices': prices,
                     },
                 )
-        
+
         # Save snapshot
         snapshot = PricingSnapshot.objects.create(
             company=company,
@@ -397,9 +397,9 @@ def track_pricing_page(company):
             plan_names=plan_names,
             prices=prices,
         )
-        
+
         return snapshot
-        
+
     except Exception as e:
         logger.error(f"Pricing page tracking failed for {company.name}: {e}")
         return None
@@ -446,16 +446,14 @@ def _detect_quarter(text):
     """Detect which quarter is being discussed."""
     import re
     now = timezone.now()
-    
-    q_match = re.search(r'q([1-4])\s*(?:20)?(\d{2})', text)
+
+    q_match = re.search(r'q([1-4])\s*(?:20)?(\d{2})', text, re.IGNORECASE)
     if q_match:
         q = q_match.group(1)
         year = q_match.group(2)
         return f'Q{q} 20{year}'
-    
-    # Fallback to current quarter
-    q = (now.month - 1) // 3 + 1
-    return f'Q{q} {now.year}'
+
+    return ''  # Unknown reporting quarter must stay unknown.
 
 
 def _extract_plan_names(text):
@@ -494,30 +492,35 @@ def capture_all_signals(company_id):
         'patent_filings': 0,
         'earnings_keywords': 0,
         'pricing_snapshot': False,
+        'errors': {},
     }
-    
+
     try:
         jobs = track_job_postings(company)
         results['job_postings'] = len(jobs)
     except Exception as e:
         logger.error(f"Job tracking failed for {company.name}: {e}")
-    
+        results['errors']['job_postings'] = 'Collection failed; check server logs.'
+
     try:
         patents = track_patent_filings(company)
         results['patent_filings'] = len(patents)
     except Exception as e:
         logger.error(f"Patent tracking failed for {company.name}: {e}")
-    
+        results['errors']['patent_filings'] = 'Collection failed; check server logs.'
+
     try:
         earnings = track_earnings_keywords(company)
         results['earnings_keywords'] = len(earnings)
     except Exception as e:
         logger.error(f"Earnings tracking failed for {company.name}: {e}")
-    
+        results['errors']['earnings_keywords'] = 'Collection failed; check server logs.'
+
     try:
         snapshot = track_pricing_page(company)
         results['pricing_snapshot'] = snapshot is not None
     except Exception as e:
         logger.error(f"Pricing tracking failed for {company.name}: {e}")
-    
+        results['errors']['pricing_snapshot'] = 'Collection failed; check server logs.'
+
     return results

@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getCompany, getCompanyTimeline, getPatterns, getInsights, triggerScrape, runAnalysis } from '../services/api';
-import { ArrowLeft, Radar, Brain, ExternalLink, Globe, MapPin, Users, Calendar, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Radar, Brain, ExternalLink, Globe, MapPin, Users, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar as ReRadar,
-  PieChart, Pie, Cell, ScatterChart, Scatter, ZAxis, Treemap
+  PieChart, Pie, Cell,
 } from 'recharts';
 
 const tooltipStyle = { background: '#fff', border: '1px solid #e2e5ea', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: 12 };
@@ -20,18 +20,23 @@ const PTYPE_LABEL = { trend: 'Trend', anomaly: 'Anomaly', correlation: 'Correlat
 
 function sourceDomain(url) { if (!url) return null; try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return null; } }
 
-const GEO_DATA = {
-  'San Francisco, CA': { region: 'North America', lat: 37.7, lng: -122.4 },
-  'New York, NY': { region: 'North America', lat: 40.7, lng: -74 },
-  'Cambridge, MA': { region: 'North America', lat: 42.3, lng: -71.1 },
-  'Ottawa, Canada': { region: 'North America', lat: 45.4, lng: -75.7 },
-  'London, UK': { region: 'Europe', lat: 51.5, lng: -0.1 },
-  'Berlin, Germany': { region: 'Europe', lat: 52.5, lng: 13.4 },
-  'Bangalore, India': { region: 'Asia Pacific', lat: 12.9, lng: 77.6 },
-  'Tokyo, Japan': { region: 'Asia Pacific', lat: 35.7, lng: 139.7 },
-  'Singapore': { region: 'Asia Pacific', lat: 1.3, lng: 103.8 },
-  'Sydney, Australia': { region: 'Asia Pacific', lat: -33.9, lng: 151.2 },
+// Dynamically infer geographic region from any headquarters string
+const REGION_KEYWORDS = {
+  'North America': ['usa', 'us', 'united states', 'canada', 'ca', 'ny', 'sf', 'tx', 'wa', 'ma', 'il', 'co', 'ga', 'fl', 'nc', 'pa', 'oh', 'va', 'az', 'or', 'san francisco', 'new york', 'seattle', 'austin', 'boston', 'chicago', 'denver', 'atlanta', 'miami', 'los angeles', 'toronto', 'vancouver', 'montreal', 'ottawa', 'cambridge', 'palo alto', 'menlo park', 'mountain view', 'sunnyvale', 'cupertino', 'redmond', 'portland', 'phoenix', 'dallas', 'houston', 'raleigh', 'charlotte', 'detroit', 'philadelphia', 'minneapolis', 'salt lake', 'mexico'],
+  'Europe': ['uk', 'united kingdom', 'london', 'berlin', 'germany', 'france', 'paris', 'amsterdam', 'netherlands', 'spain', 'madrid', 'barcelona', 'italy', 'milan', 'rome', 'dublin', 'ireland', 'sweden', 'stockholm', 'norway', 'oslo', 'denmark', 'copenhagen', 'finland', 'helsinki', 'switzerland', 'zurich', 'geneva', 'portugal', 'lisbon', 'poland', 'warsaw', 'czech', 'prague', 'austria', 'vienna', 'belgium', 'brussels', 'romania', 'bucharest', 'ukraine', 'kyiv', 'europe', 'eu', 'gdpr', 'estonia', 'tallinn', 'luxembourg'],
+  'Asia Pacific': ['india', 'bangalore', 'bengaluru', 'mumbai', 'hyderabad', 'delhi', 'pune', 'chennai', 'japan', 'tokyo', 'osaka', 'china', 'beijing', 'shanghai', 'shenzhen', 'singapore', 'australia', 'sydney', 'melbourne', 'south korea', 'seoul', 'hong kong', 'taiwan', 'taipei', 'vietnam', 'hanoi', 'thailand', 'bangkok', 'indonesia', 'jakarta', 'malaysia', 'kuala lumpur', 'philippines', 'manila', 'new zealand', 'auckland', 'apac', 'asia'],
+  'Middle East & Africa': ['israel', 'tel aviv', 'dubai', 'uae', 'saudi', 'riyadh', 'qatar', 'doha', 'egypt', 'cairo', 'south africa', 'cape town', 'johannesburg', 'nigeria', 'lagos', 'kenya', 'nairobi', 'middle east', 'africa'],
+  'Latin America': ['brazil', 'são paulo', 'sao paulo', 'rio', 'mexico city', 'argentina', 'buenos aires', 'colombia', 'bogota', 'chile', 'santiago', 'peru', 'lima', 'latin america', 'latam'],
 };
+
+function inferRegion(text) {
+  if (!text) return null;
+  const lower = text.toLowerCase();
+  for (const [region, keywords] of Object.entries(REGION_KEYWORDS)) {
+    if (keywords.some(kw => (' ' + lower.replace(/[^a-z0-9]+/g, ' ') + ' ').includes(' ' + kw + ' '))) return region;
+  }
+  return null;
+}
 
 function ExpandableRow({ dp }) {
   const [open, setOpen] = useState(false);
@@ -89,9 +94,8 @@ export default function CompanyDetail() {
   const [analyzing, setAnalyzing] = useState(false);
   const [tab, setTab] = useState('overview');
 
-  useEffect(() => { fetchAll(); }, [id]);
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
       const [cR, tR, pR, iR] = await Promise.all([getCompany(id), getCompanyTimeline(id), getPatterns({ company: id }), getInsights({ company: id })]);
@@ -99,10 +103,12 @@ export default function CompanyDetail() {
       setPatterns(pR.data.results || pR.data); setInsights(iR.data.results || iR.data);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  };
+  }, [id]);
 
-  const handleScrape = async () => { setScraping(true); try { await triggerScrape(id); await fetchAll(); } catch(e){} finally { setScraping(false); } };
-  const handleAnalyze = async () => { setAnalyzing(true); try { await runAnalysis(id); await fetchAll(); } catch(e){} finally { setAnalyzing(false); } };
+  useEffect(() => { const timer = setTimeout(() => { fetchAll(); }, 0); return () => clearTimeout(timer); }, [fetchAll]);
+
+  const handleScrape = async () => { setScraping(true); try { await triggerScrape(id); await fetchAll(); } catch(e){ console.error(e); } finally { setScraping(false); } };
+  const handleAnalyze = async () => { setAnalyzing(true); try { await runAnalysis(id); await fetchAll(); } catch(e){ console.error(e); } finally { setAnalyzing(false); } };
 
   if (loading) return <div className="loading"><div className="spinner" /></div>;
   if (!company) return <div className="empty-state"><h3>Company not found</h3></div>;
@@ -111,12 +117,14 @@ export default function CompanyDetail() {
     name: CAT_LABEL[c.category] || c.category, count: c.count
   }));
 
-  // Build radar chart data from categories
-  const allCats = ['Product Launch', 'Hiring', 'Funding', 'Technology', 'Marketing', 'Expansion', 'Partnership'];
-  const radarData = allCats.map(cat => {
-    const match = catBreakdown.find(c => c.name.toLowerCase().includes(cat.toLowerCase()));
-    return { category: cat, value: match ? match.count : 0, fullMark: Math.max(...catBreakdown.map(c => c.count), 5) };
-  });
+  // Build radar chart data dynamically from ALL categories that have data
+  const radarData = catBreakdown.length > 0
+    ? catBreakdown.map(c => ({
+        category: c.name,
+        value: c.count,
+        fullMark: Math.max(...catBreakdown.map(x => x.count), 5),
+      }))
+    : [];
 
   // Sentiment pie
   const sentimentData = (timeline?.timeline || []).reduce((acc, dp) => {
@@ -126,20 +134,20 @@ export default function CompanyDetail() {
   const sentPie = Object.entries(sentimentData).map(([name, value]) => ({ name, value }));
   const sentColors = { positive: '#00a67d', neutral: '#1976d2', negative: '#e53935' };
 
-  // Geographic presence — only use real data, no fake padding
-  const hqGeo = GEO_DATA[company.headquarters] || { region: 'Unknown' };
+  // Geographic presence — dynamically infer region from any HQ string
+  const hqRegion = inferRegion(company.headquarters);
   const expansionMentions = (timeline?.timeline || []).filter(dp => dp.category === 'expansion');
   const geoRegions = {};
-  if (hqGeo.region && hqGeo.region !== 'Unknown') {
-    geoRegions[hqGeo.region] = 5; // HQ is a real data point
+  if (hqRegion) {
+    geoRegions[hqRegion] = 1; // HQ is a real data point
   }
   expansionMentions.forEach(dp => {
-    const text = (dp.title + ' ' + dp.content).toLowerCase();
-    if (text.includes('europe') || text.includes('london') || text.includes('gdpr')) geoRegions['Europe'] = (geoRegions['Europe'] || 0) + 2;
-    if (text.includes('asia') || text.includes('tokyo') || text.includes('india') || text.includes('apac')) geoRegions['Asia Pacific'] = (geoRegions['Asia Pacific'] || 0) + 2;
-    if (text.includes('latin') || text.includes('brazil')) geoRegions['Latin America'] = (geoRegions['Latin America'] || 0) + 1;
-    if (hqGeo.region && hqGeo.region !== 'Unknown') {
-      geoRegions[hqGeo.region] = (geoRegions[hqGeo.region] || 0) + 1;
+    const text = (dp.title + ' ' + (dp.content || '')).toLowerCase();
+    // Check every region's keywords against the expansion signal text
+    for (const [region, keywords] of Object.entries(REGION_KEYWORDS)) {
+      if (keywords.some(kw => (' ' + text.replace(/[^a-z0-9]+/g, ' ') + ' ').includes(' ' + kw + ' '))) {
+        geoRegions[region] = (geoRegions[region] || 0) + 1;
+      }
     }
   });
   const geoData = Object.entries(geoRegions).map(([name, value]) => ({ name, value }));
@@ -165,6 +173,7 @@ export default function CompanyDetail() {
 
   return (
     <div>
+      <div className="card" style={{ marginBottom: 16 }}>Company profile values are manually entered and require source verification. Charts describe collected reports, not market share or business performance.</div>
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button className="btn btn-sm btn-secondary" onClick={() => nav('/companies')} style={{ padding: '5px 8px' }}><ArrowLeft size={14} /></button>
@@ -189,7 +198,7 @@ export default function CompanyDetail() {
         <div className="stat-card"><div className="stat-label">Data Points</div><div className="stat-value">{company.data_points_count || 0}</div></div>
         <div className="stat-card"><div className="stat-label">Patterns</div><div className="stat-value">{company.patterns_count || 0}</div></div>
         <div className="stat-card"><div className="stat-label">Insights</div><div className="stat-value">{company.insights_count || 0}</div></div>
-        <div className="stat-card"><div className="stat-label">HQ Region</div><div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginTop: 4 }}>{hqGeo.region || 'N/A'}</div></div>
+        <div className="stat-card"><div className="stat-label">HQ Region</div><div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginTop: 4 }}>{hqRegion || 'N/A'}</div></div>
       </div>
 
       {company.description && <div className="card" style={{ marginBottom: 16 }}><p style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.6 }}>{company.description}</p></div>}
@@ -281,7 +290,7 @@ export default function CompanyDetail() {
             <div className="card-header"><span className="card-title">Detected Patterns</span></div>
             {patterns.length === 0 ? <div className="empty-state"><p>Run analysis to detect patterns.</p></div> :
               <table className="data-table">
-                <thead><tr><th>Pattern</th><th>Type</th><th>Confidence</th><th>Detected</th></tr></thead>
+                <thead><tr><th>Pattern</th><th>Type</th><th>Heuristic score</th><th>Detected</th></tr></thead>
                 <tbody>
                   {patterns.map(p => (
                     <tr key={p.id}>
@@ -311,7 +320,7 @@ export default function CompanyDetail() {
         <>
           <div className="grid-2">
             <div className="card">
-              <div className="card-header"><span className="card-title">Geographic Presence</span></div>
+              <div className="card-header"><span className="card-title">Geographic Mentions</span></div>
               {geoData.length > 0 ? (
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={geoData}>
@@ -319,7 +328,7 @@ export default function CompanyDetail() {
                   <XAxis dataKey="name" tick={{ fill: '#5e5e76', fontSize: 11 }} />
                   <YAxis tick={{ fill: '#8e8ea0', fontSize: 10 }} />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="value" radius={[3, 3, 0, 0]} name="Presence Score">
+                  <Bar dataKey="value" radius={[3, 3, 0, 0]} name="Mention count">
                     {geoData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Bar>
                 </BarChart>
@@ -415,7 +424,7 @@ export default function CompanyDetail() {
                 <div className="insight-meta">
                   <span className={`badge ${ins.priority === 'urgent' ? 'badge-red' : ins.priority === 'high' ? 'badge-amber' : 'badge-blue'}`}>{PRIORITY_LABEL[ins.priority] || ins.priority}</span>
                   {ins.predicted_timeline && <span className="badge badge-cyan">⏱ {ins.predicted_timeline}</span>}
-                  <span className="badge badge-purple">{Math.round(ins.probability * 100)}% confidence</span>
+                  <span className="badge badge-purple">{Math.round(ins.probability * 100)}% heuristic score</span>
                 </div>
               </div>
             ))}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getSignals, getCompanies, captureSignals, getCompoundSignals } from '../services/api';
 import { Radar, Search, Zap, DollarSign, FileText, Briefcase, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
@@ -106,9 +106,8 @@ export default function Signals() {
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
 
-  useEffect(() => { fetchAll(); }, []);
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
       const [sR, csR, coR] = await Promise.all([getSignals({ page_size: 200 }), getCompoundSignals(), getCompanies()]);
@@ -117,7 +116,9 @@ export default function Signals() {
       setCompanies(coR.data.results || coR.data);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  };
+  }, []);
+
+  useEffect(() => { const timer = setTimeout(() => { fetchAll(); }, 0); return () => clearTimeout(timer); }, [fetchAll]);
 
   const handleCapture = async (companyId) => {
     setCapturing(p => ({ ...p, [companyId]: true }));
@@ -141,6 +142,7 @@ export default function Signals() {
 
   return (
     <div>
+      <div className="card" style={{ marginBottom: 16 }}>Automated signal candidates require source review. A news mention does not confirm a job opening, patent filing, or earnings transcript. Scores are heuristic; dates show collection time.</div>
       <div className="page-header">
         <div>
           <h1 className="page-title">Signal Capture</h1>
@@ -206,7 +208,7 @@ export default function Signals() {
 
       {/* Filter tabs */}
       <div className="tabs">
-        {['all', 'job_posting', 'patent_filing', 'pricing_change', 'earnings_keyword'].map(t => (
+        {['all', ...Object.keys(typeData)].map(t => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
             {t === 'all' ? `All (${signals.length})` : `${TYPE_LABEL[t] || t} (${typeData[t] || 0})`}
           </button>

@@ -50,7 +50,7 @@ export default function Patterns() {
                 <th>Pattern</th>
                 <th>Company</th>
                 <th>Type</th>
-                <th>Confidence</th>
+                <th>Heuristic score</th>
                 <th>Status</th>
                 <th>Detected</th>
               </tr>

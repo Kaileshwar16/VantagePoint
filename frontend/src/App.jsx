@@ -1,4 +1,6 @@
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import SessionGate from './components/SessionGate';
+import DataQuality from './pages/DataQuality';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import Companies from './pages/Companies';
@@ -15,6 +17,7 @@ import './index.css';
 
 const pageTitles = {
   '/': 'Dashboard',
+  '/data-quality': 'Evidence Quality',
   '/companies': 'Companies',
   '/insights': 'Insights',
   '/patterns': 'Patterns',
@@ -63,6 +66,8 @@ function AppContent() {
         <TopBar />
         <div className="page-content">
           <Routes>
+            <Route path="/data-quality" element={<DataQuality />} />
+            <Route path="*" element={<div>Page not found. <a href="/">Go to dashboard</a></div>} />
             <Route path="/" element={<Dashboard />} />
             <Route path="/companies" element={<Companies />} />
             <Route path="/companies/:id" element={<CompanyDetail />} />
@@ -83,7 +88,7 @@ function AppContent() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppContent />
+      <SessionGate><AppContent /></SessionGate>
     </BrowserRouter>
   );
 }

@@ -14,7 +14,7 @@ def run_analysis(request, company_id):
         company = Company.objects.get(id=company_id)
     except Company.DoesNotExist:
         return Response({'error': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
-    
+
     try:
         results = analyze_company(company_id)
         return Response({
@@ -23,7 +23,9 @@ def run_analysis(request, company_id):
             'message': f'Analysis complete. Found {results["patterns"]} patterns and generated {results["insights"]} insights.'
         })
     except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        import logging
+        logging.getLogger(__name__).exception('Analysis failed')
+        return Response({'error': 'Analysis failed. Check server logs.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -36,4 +38,6 @@ def run_all_analysis(request):
             'message': f'Analysis complete for {len(results)} companies.'
         })
     except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        import logging
+        logging.getLogger(__name__).exception('Analysis failed')
+        return Response({'error': 'Analysis failed. Check server logs.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

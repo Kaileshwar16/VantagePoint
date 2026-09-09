@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getCompanies, getTimelineOverlay } from '../services/api';
-import { GitCompare, Play } from 'lucide-react';
+import { GitCompare, } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 
 const COLORS = ['#ff5733', '#1976d2', '#00a67d', '#7b61ff', '#f5a623', '#0097a7'];
@@ -40,13 +40,13 @@ export default function TemporalAnalysis() {
     if (!data) return [];
     const allDates = new Set();
     const companyNames = Object.keys(data);
-    
+
     companyNames.forEach(name => {
       data[name].events.forEach(e => allDates.add(e.date));
     });
-    
+
     const sortedDates = [...allDates].sort();
-    
+
     // Group by week for cleaner visualization
     const weeks = {};
     sortedDates.forEach(d => {
@@ -61,7 +61,7 @@ export default function TemporalAnalysis() {
         weeks[key][name] += dayEvents;
       });
     });
-    
+
     return Object.values(weeks).sort((a, b) => a.date.localeCompare(b.date));
   };
 

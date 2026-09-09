@@ -6,13 +6,15 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / '.env')
 
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-vp-dev-key-change-in-production-!@#$%')
 
-DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+if not DEBUG and (not os.getenv('DJANGO_SECRET_KEY') or len(SECRET_KEY) < 50):
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured('Set a unique DJANGO_SECRET_KEY of at least 50 characters, or DEBUG=true for local development.')
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
@@ -112,7 +114,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 # DRF settings
 REST_FRAMEWORK = {
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'DEFAULT_PAGINATION_CLASS': 'api.pagination.BoundedPagination',
     'PAGE_SIZE': 20,
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
@@ -123,7 +125,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',  # Dev mode - change for production
+        'rest_framework.permissions.IsAdminUser',  # One private organization per deployment
     ],
 }
 
@@ -139,3 +141,17 @@ CELERY_TIMEZONE = 'UTC'
 SCRAPING_USER_AGENT = 'VantagePoint Bot/1.0 (+https://vantagepoint.ai)'
 SCRAPING_MAX_CONCURRENT = 4
 SCRAPING_DELAY = 2  # seconds between requests
+
+# Deploy behind HTTPS; only enable proxy trust when the proxy strips incoming headers.
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_SSL_REDIRECT = not DEBUG
+SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
+if os.getenv('TRUST_PROXY', 'false').lower() == 'true':
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+CORS_ALLOWED_ORIGINS = [x.strip() for x in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173').split(',') if x.strip()]
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
+REST_FRAMEWORK['DEFAULT_THROTTLE_CLASSES'] = ['rest_framework.throttling.AnonRateThrottle', 'rest_framework.throttling.UserRateThrottle']
+REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {'anon': '30/min', 'user': '300/min'}

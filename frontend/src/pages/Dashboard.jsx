@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDashboard, runAllAnalysis } from '../services/api';
 import { Building2, Database, TrendingUp, Lightbulb, RefreshCw, ArrowRight } from 'lucide-react';
@@ -16,14 +16,15 @@ export default function Dashboard() {
   const [analyzing, setAnalyzing] = useState(false);
   const nav = useNavigate();
 
-  useEffect(() => { fetchData(); }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try { const r = await getDashboard(); setData(r.data); }
     catch (e) { console.error(e); }
     finally { setLoading(false); }
-  };
+  }, []);
+
+  useEffect(() => { const timer = setTimeout(() => { fetchData(); }, 0); return () => clearTimeout(timer); }, [fetchData]);
 
   const handleAnalyze = async () => {
     setAnalyzing(true);

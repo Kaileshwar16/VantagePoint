@@ -3,21 +3,26 @@ Management command to seed the database with demo data.
 """
 import random
 from datetime import timedelta
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
+from django.conf import settings
 from django.utils import timezone
 from api.models import Company, DataPoint, Pattern, Insight, CompetitorRelationship
 
 
 class Command(BaseCommand):
     help = 'Seed database with demo competitive intelligence data'
-    
+
     def handle(self, *args, **options):
-        self.stdout.write('Seeding database...')
-        
+        if not settings.DEBUG:
+            raise CommandError('Demo seeding is disabled outside development.')
+        if Company.objects.exists():
+            raise CommandError('Seed only an empty development database to avoid mixing demo and real records.')
+        self.stdout.write('Seeding DEMO database; all generated records are fictional and unverified.')
+
         # Create companies
         companies_data = [
             {
-                'name': 'Stripe',
+                'name': 'DEMO Stripe',
                 'domain': 'https://stripe.com',
                 'industry': 'finance',
                 'description': 'Online payment processing platform for internet businesses',
@@ -27,7 +32,7 @@ class Command(BaseCommand):
                 'founded_year': 2010,
             },
             {
-                'name': 'Shopify',
+                'name': 'DEMO Shopify',
                 'domain': 'https://shopify.com',
                 'industry': 'tech',
                 'description': 'E-commerce platform for online stores and retail point-of-sale systems',
@@ -37,7 +42,7 @@ class Command(BaseCommand):
                 'founded_year': 2006,
             },
             {
-                'name': 'HubSpot',
+                'name': 'DEMO HubSpot',
                 'domain': 'https://hubspot.com',
                 'industry': 'tech',
                 'description': 'CRM platform with marketing, sales, and service software',
@@ -47,7 +52,7 @@ class Command(BaseCommand):
                 'founded_year': 2006,
             },
             {
-                'name': 'Datadog',
+                'name': 'DEMO Datadog',
                 'domain': 'https://datadoghq.com',
                 'industry': 'tech',
                 'description': 'Cloud monitoring and security platform',
@@ -57,7 +62,7 @@ class Command(BaseCommand):
                 'founded_year': 2010,
             },
             {
-                'name': 'Twilio',
+                'name': 'DEMO Twilio',
                 'domain': 'https://twilio.com',
                 'industry': 'tech',
                 'description': 'Cloud communications platform as a service',
@@ -77,7 +82,7 @@ class Command(BaseCommand):
                 'founded_year': 2013,
             },
         ]
-        
+
         companies = []
         for data in companies_data:
             company, created = Company.objects.get_or_create(
@@ -87,7 +92,7 @@ class Command(BaseCommand):
             companies.append(company)
             if created:
                 self.stdout.write(f'  Created company: {company.name}')
-        
+
         # Create competitor relationships
         for i, c1 in enumerate(companies):
             for c2 in companies[i+1:]:
@@ -96,14 +101,14 @@ class Command(BaseCommand):
                         company=c1, competitor=c2,
                         defaults={'overlap_score': random.uniform(20, 85)}
                     )
-        
+
         # Create data points
         categories = ['product_launch', 'pricing_change', 'hiring', 'partnership',
                        'funding', 'acquisition', 'expansion', 'leadership',
                        'technology', 'marketing', 'news']
         sentiments = ['positive', 'neutral', 'negative']
         impacts = ['low', 'medium', 'high', 'critical']
-        
+
         data_point_templates = [
             ('product_launch', '{company} Launches New AI-Powered Feature Suite', 'The company unveiled a comprehensive AI integration across its platform, promising 3x efficiency gains for enterprise customers.'),
             ('product_launch', '{company} Releases Major Platform Update v4.0', 'New version includes redesigned dashboard, API improvements, and enhanced security features.'),
@@ -126,21 +131,21 @@ class Command(BaseCommand):
             ('legal', '{company} Faces Regulatory Scrutiny in EU', 'European regulators investigate data handling practices.'),
             ('news', '{company} Hosts Annual Developer Conference', 'Thousands attend annual conference, several major announcements made.'),
         ]
-        
+
         now = timezone.now()
         dp_count = 0
         for company in companies:
             # Create 15-25 data points per company spread over last 90 days
             num_points = random.randint(15, 25)
             selected = random.sample(data_point_templates, min(num_points, len(data_point_templates)))
-            
+
             for i, (category, title_template, content) in enumerate(selected):
                 days_ago = random.randint(0, 90)
                 hours_ago = random.randint(0, 23)
-                
+
                 sentiment = random.choices(sentiments, weights=[0.4, 0.4, 0.2])[0]
                 impact = random.choices(impacts, weights=[0.2, 0.4, 0.3, 0.1])[0]
-                
+
                 dp, created = DataPoint.objects.get_or_create(
                     company=company,
                     title=title_template.format(company=company.name),
@@ -149,17 +154,18 @@ class Command(BaseCommand):
                         'category': category,
                         'sentiment': sentiment,
                         'impact': impact,
-                        'source_url': f'https://techcrunch.com/article/{company.name.lower()}-{i}',
-                        'source_name': random.choice(['TechCrunch', 'Bloomberg', 'Reuters', 'The Verge', 'VentureBeat']),
+                        'source_url': '',
+                        'source_name': 'DEMO — fictional record',
+                        'raw_data': {'is_demo': True},
                         'published_at': now - timedelta(days=days_ago, hours=hours_ago),
                         'confidence_score': random.uniform(0.6, 0.95),
                     }
                 )
                 if created:
                     dp_count += 1
-        
+
         self.stdout.write(f'  Created {dp_count} data points')
-        
+
         # Create patterns
         pattern_count = 0
         for company in companies:
@@ -183,7 +189,7 @@ class Command(BaseCommand):
                     'confidence': random.uniform(0.5, 0.8),
                 },
             ]
-            
+
             selected_patterns = random.sample(patterns_data, random.randint(1, 3))
             for pd in selected_patterns:
                 pattern, created = Pattern.objects.get_or_create(
@@ -196,9 +202,9 @@ class Command(BaseCommand):
                     # Link some data points
                     dps = DataPoint.objects.filter(company=company).order_by('?')[:3]
                     pattern.supporting_data.set(dps)
-        
+
         self.stdout.write(f'  Created {pattern_count} patterns')
-        
+
         # Create insights
         insight_count = 0
         insight_templates = [
@@ -243,7 +249,7 @@ class Command(BaseCommand):
                 'probability': 0.6,
             },
         ]
-        
+
         for company in companies:
             selected_insights = random.sample(insight_templates, random.randint(2, 4))
             for it in selected_insights:
@@ -257,6 +263,6 @@ class Command(BaseCommand):
                     insight_count += 1
                     patterns = Pattern.objects.filter(company=company).order_by('?')[:2]
                     insight.related_patterns.set(patterns)
-        
+
         self.stdout.write(f'  Created {insight_count} insights')
         self.stdout.write(self.style.SUCCESS('Database seeded successfully!'))

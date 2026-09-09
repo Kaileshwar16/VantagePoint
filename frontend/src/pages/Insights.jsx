@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getInsights, updateInsight } from '../services/api';
 import { Check, X } from 'lucide-react';
 
@@ -10,9 +10,10 @@ export default function Insights() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
 
-  useEffect(() => { fetchInsights(); }, []);
-  const fetchInsights = async () => { setLoading(true); try { const r = await getInsights(); setInsights(r.data.results || r.data); } catch(e){} finally { setLoading(false); } };
-  const handleStatus = async (id, status) => { try { await updateInsight(id, { status }); fetchInsights(); } catch(e){} };
+  const fetchInsights = useCallback(async () => { setLoading(true); try { const r = await getInsights(); setInsights(r.data.results || r.data); } catch(e){ console.error(e); } finally { setLoading(false); } }, []);
+
+  useEffect(() => { const timer = setTimeout(() => { fetchInsights(); }, 0); return () => clearTimeout(timer); }, [fetchInsights]);
+  const handleStatus = async (id, status) => { try { await updateInsight(id, { status }); fetchInsights(); } catch(e){ console.error(e); } };
 
   const filtered = filter === 'all' ? insights : insights.filter(i => i.priority === filter);
 
@@ -23,7 +24,7 @@ export default function Insights() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Insights</h1>
-          <p className="page-desc">AI-generated strategic predictions and recommendations</p>
+          <p className="page-desc">Rule-based hypotheses for review; scores are not calibrated probabilities</p>
         </div>
       </div>
 
@@ -68,7 +69,7 @@ export default function Insights() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <div className="insight-meta">
                 {ins.predicted_timeline && <span className="badge badge-cyan">⏱ {ins.predicted_timeline}</span>}
-                <span className="badge badge-purple">{Math.round(ins.probability * 100)}% confidence</span>
+                <span className="badge badge-purple">{Math.round(ins.probability * 100)}% heuristic score</span>
               </div>
               {ins.status === 'new' && (
                 <div style={{ display: 'flex', gap: 6 }}>

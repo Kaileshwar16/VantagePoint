@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCompanies, createCompany, deleteCompany, triggerScrape } from '../services/api';
 import { Plus, Trash2, Radar, Search, X, AlertTriangle } from 'lucide-react';
@@ -15,14 +15,15 @@ export default function Companies() {
   const [form, setForm] = useState({ name: '', domain: '', industry: 'tech', description: '', headquarters: '', employee_count: '' });
   const nav = useNavigate();
 
-  useEffect(() => { fetchCompanies(); }, []);
 
-  const fetchCompanies = async () => {
+  const fetchCompanies = useCallback(async () => {
     setLoading(true);
     try { const r = await getCompanies(); setCompanies(r.data.results || r.data); }
     catch (e) { console.error(e); }
     finally { setLoading(false); }
-  };
+  }, []);
+
+  useEffect(() => { const timer = setTimeout(() => { fetchCompanies(); }, 0); return () => clearTimeout(timer); }, [fetchCompanies]);
 
   const handleCreate = async (e) => {
     e.preventDefault();

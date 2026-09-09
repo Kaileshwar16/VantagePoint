@@ -16,29 +16,9 @@ def trigger_scrape(request, company_id):
         company = Company.objects.get(id=company_id)
     except Company.DoesNotExist:
         return Response({'error': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
-    
-    spider = request.data.get('spider', 'news')
-    
-    job = ScrapeJob.objects.create(
-        company=company,
-        spider_name=spider,
-        status='running',
-        started_at=timezone.now(),
-    )
-    
-    try:
-        items_count = run_scrape_for_company(company.id, spider)
-        job.status = 'completed'
-        job.items_scraped = items_count or 0
-        job.completed_at = timezone.now()
-        job.save()
-    except Exception as e:
-        job.status = 'failed'
-        job.errors = str(e)
-        job.completed_at = timezone.now()
-        job.save()
-    
-    return Response(ScrapeJobSerializer(job).data, status=status.HTTP_202_ACCEPTED)
+
+    from .jobs import execute_scrape
+    return execute_scrape(company, request.data.get('spider', 'news'))
 
 
 @api_view(['GET'])
@@ -48,5 +28,5 @@ def scrape_status(request, job_id):
         job = ScrapeJob.objects.get(id=job_id)
     except ScrapeJob.DoesNotExist:
         return Response({'error': 'Job not found'}, status=status.HTTP_404_NOT_FOUND)
-    
+
     return Response(ScrapeJobSerializer(job).data)

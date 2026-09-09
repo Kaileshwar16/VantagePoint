@@ -6,6 +6,7 @@ const sections = [
     label: 'OVERVIEW',
     items: [
       { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/data-quality', icon: Shield, label: 'Evidence Quality' },
     ],
   },
   {

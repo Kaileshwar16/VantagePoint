@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getDataPoints } from '../services/api';
+import { getDataPoints, updateDataPoint } from '../services/api';
 import { Search, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 
 const CAT_LABEL = {
@@ -25,7 +25,14 @@ function sourceDomain(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url.slice(0, 40); }
 }
 
-function ExpandableRow({ dp }) {
+function ExpandableRow({ dp, onUpdate }) {
+  const [reviewing, setReviewing] = useState(false);
+  async function review() {
+    setReviewing(true);
+    try { const r = await updateDataPoint(dp.id, { is_verified: !dp.is_verified }); onUpdate({ ...dp, ...r.data }); }
+    catch (e) { console.error(e); }
+    finally { setReviewing(false); }
+  }
   const [open, setOpen] = useState(false);
   const domain = sourceDomain(dp.source_url);
 
@@ -51,14 +58,16 @@ function ExpandableRow({ dp }) {
             <span>{dp.source_name || '—'}</span>
           )}
         </td>
-        <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{dp.published_at ? new Date(dp.published_at).toLocaleDateString() : new Date(dp.created_at).toLocaleDateString()}</td>
+        <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{dp.published_at ? new Date(dp.published_at).toLocaleDateString() : 'Publication date unknown'}</td>
       </tr>
       {open && (
         <tr>
           <td colSpan={7} style={{ padding: '0 14px 16px 38px', background: 'var(--bg-muted)', borderBottom: '1px solid var(--border)' }}>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7, maxWidth: 900, paddingTop: 12 }}>
+              <p><strong>{dp.is_verified && dp.source_url ? 'Reviewed with source' : 'Unverified'}</strong> · Collected {new Date(dp.created_at).toLocaleString()} · Automated classifications require review.</p>
               {dp.content || 'No additional content available for this data point.'}
             </div>
+            <button className="btn btn-sm btn-secondary" disabled={reviewing || !dp.source_url} onClick={review}>{dp.is_verified ? 'Remove verification' : 'I checked the source — mark verified'}</button>
             {dp.source_url && (
               <a href={dp.source_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 10, color: 'var(--accent)' }}>
                 Open original article on {domain} <ExternalLink size={11} />
@@ -135,7 +144,7 @@ export default function Intel() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(dp => <ExpandableRow key={dp.id} dp={dp} />)}
+              {filtered.map(dp => <ExpandableRow key={dp.id} dp={dp} onUpdate={updated => setData(previous => previous.map(item => item.id === updated.id ? updated : item))} />)}
             </tbody>
           </table>
         )}

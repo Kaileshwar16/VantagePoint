@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getBattlecards, getCompanies, runAdvancedAnalysis } from '../services/api';
 import { Shield, TrendingUp, TrendingDown, Minus, RefreshCw, AlertTriangle } from 'lucide-react';
 
@@ -13,9 +13,8 @@ export default function Battlecards() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState({});
 
-  useEffect(() => { fetchAll(); }, []);
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
       const [bR, cR] = await Promise.all([getBattlecards(), getCompanies()]);
@@ -23,7 +22,9 @@ export default function Battlecards() {
       setCompanies(cR.data.results || cR.data);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  };
+  }, []);
+
+  useEffect(() => { const timer = setTimeout(() => { fetchAll(); }, 0); return () => clearTimeout(timer); }, [fetchAll]);
 
   const handleUpdate = async (companyId) => {
     setUpdating(p => ({ ...p, [companyId]: true }));
